@@ -1,0 +1,179 @@
+model_net:
+  name: hieramamba
+meta:
+  trainer_type: TrainerAuxiliary
+  evaluator_type: EvaluatorAuxiliary
+model:
+  early_fusion: true
+  text_net:
+    name: identity
+    in_dim: 768
+    embd_dim: 768
+    n_heads: 4
+    max_seq_len: 24
+    use_abs_pe: false
+    use_bkgd_token: true
+  vid_net:
+    name: hieramamba_backbone
+    in_dim: 256
+    embd_dim: 384
+    n_heads: 4
+    max_seq_len: 2304
+    arch:
+    - 2
+    - 0
+    - 8
+    use_abs_pe: true
+    pool_method: mean
+    block_type: AnchorMambaPoolingBlockGated
+    ffn_ratio: 2
+    return_anchor: true
+    local_encode: true
+    local_encoder_type: transformer
+    local_window_size: 5
+    local_encode_num_layers: 0
+    mamba_headdim: 64
+    mamba_dstate: 64
+    mamba_expand: 2
+    mamba_dconv: 7
+    query_modulation: false
+    query_aware_gate: false
+    query_mod_hidden_dim: 0
+    query_boundary_importance: true
+    importance_debug: false
+    importance_hidden_dim: 0
+    importance_alpha: 0.4
+    importance_beta: 0.4
+    importance_gamma: 0.2
+    adaptive_anchor: true
+    target_keep_ratio: 0.5
+    keep_ratio_per_level:
+    - 0.5
+    - 0.5
+    - 0.5
+    - 0.5
+    - 0.5
+    - 0.5
+    - 0.5
+    - 0.5
+    progressive_compression_debug: false
+    coarse_to_fine_refine: false
+    refine_levels: 3
+    allocator_policy: oracle
+    allocator_random_seed: 1
+  fusion:
+    name: xattn
+    n_layers: 2
+    n_heads: 4
+    attn_pdrop: 0.0
+    proj_pdrop: 0.1
+    path_pdrop: 0.1
+    xattn_mode: adaln
+  cls_head:
+    name: cls
+    n_layers: 2
+    prior_prob: 0.0
+  reg_head:
+    name: reg
+    n_layers: 2
+pt_gen:
+  regression_range: 4
+  sigma: 0.5
+train:
+  data:
+    name: video_centric
+    split: train
+    anno_file: ./data/ego4d/annotations/ego4d_egovlp.json
+    vid_feat_dir: ./data/ego4d/egovlp_features/video
+    text_feat_dir: ./data/ego4d/egovlp_features/text/token_768d
+    ext_score_dir: null
+    clip_size: 32
+    clip_stride: 8
+    downsample_rate: 2
+    to_fixed_len: false
+    crop_ratio: null
+    max_num_text: 2
+  batch_size: 1
+  num_workers: 2
+  epochs: 2
+  warmup_epochs: 5
+  ema_beta: 0.999
+  center_sampling: radius
+  center_sampling_radius: 1.5
+  loss_norm: 10
+  loss_weight: 1.0
+  reg_loss: iou
+  loss_aux:
+    query_boundary_importance:
+      enable: false
+      weight: 0.1
+      boundary_loss_weight: 0.0
+      relevance_weight: 1.0
+      boundary_weight: 1.0
+      change_weight: 0.25
+      final_weight: 0.5
+      boundary_sigma: 1.5
+      max_pos_weight: 20.0
+    ds_contrast:
+      enable: true
+      type: ds_contrastive
+      acc_mode: legacy_acc
+      contr_type: contr_mp
+      weight: 100.0
+      radius: 0
+      neg_ratio: 8
+      gap_ratio: 0.2
+      temperature: 0.07
+      proj_outdim: 256
+      proj_expand: 1.0
+      proj_num_layers: 2
+      hard_neg: false
+      cross_video_neg: false
+    gt_contrast:
+      enable: true
+      type: gt_point_contrastive
+      contr_type: point_gt_contr_pooled
+      weight: 10.0
+      neg_ratio: 1.0
+      temperature: 0.07
+      use_projector: true
+      proj_expand: 1.0
+      proj_outdim: 256
+      proj_num_layers: 2
+      span_radius: 1.5
+      span_contr_gt: false
+  optimizer:
+    name: adamw
+    lr: 0.0001
+    weight_decay: 0.05
+  clip_grad_norm: 1.0
+  scheduler:
+    name: multistep
+    steps:
+    - -1
+eval:
+  data:
+    name: video_centric
+    split: val
+  ranks:
+  - 1
+  - 5
+  iou_threshs:
+  - 0.3
+  - 0.5
+  pre_nms_topk: 2000
+  pre_nms_thresh: 0.001
+  seg_len_thresh: 0.1
+  max_text_len: 24
+  batchify_text_queries: true
+  nms:
+    mode: soft_nms
+    iou_thresh: 0.1
+    min_score: 0.001
+    max_num_segs: 5
+    sigma: 0.9
+    voting_thresh: 0.95
+log:
+  log_interval: 100
+  checkpoint_epochs:
+  - -1
